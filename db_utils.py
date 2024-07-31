@@ -1,87 +1,96 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
-import yaml
+import seaborn as sns
 
-class RDSDatabaseConnector:
-    def __init__(self, credentials):
-        # Set up the connection string for the database
-        db_string = f"postgresql://{credentials['user']}:{credentials['password']}@{credentials['host']}:{credentials['port']}/{credentials['dbname']}"
-        self.engine = create_engine(db_string)
-        print("Connected to the database successfully!")
+# Load data from a CSV file into a DataFrame
+df = pd.read_csv('path_to_your_data.csv')
 
-    def fetch_data(self):
-        # Fetch data from the customer_activity table
-        return pd.read_sql("SELECT * FROM customer_activity", self.engine)
+# Define a function to plot bar charts easily
+def plot_bar(data, title, xlabel, ylabel):
+    data.plot(kind='bar')
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.show()
 
-    def save_data(self, data_frame, filename='customer_activity.csv'):
-        # Save the fetched data to a CSV file
-        data_frame.to_csv(filename, index=False)
-        print(f"Data saved to {filename}")
+# Define a function to plot pie charts easily
+def plot_pie(data, title):
+    data.plot(kind='pie', autopct='%1.1f%%')
+    plt.title(title)
+    plt.ylabel('')
+    plt.show()
 
-class DataFrameTransform:
+# Milestone 1: Familiarize with the data
+print("Data Shape:", df.shape)
+print("Data Columns:", df.columns)
+print("Sample Data:\n", df.head())
+
+# Task 1: Convert columns to the correct format
+# Assuming 'month' is in string format and needs to be converted to categorical
+df['month'] = pd.Categorical(df['month'], categories=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], ordered=True)
+
+# Task 2: Create a class to get information from the DataFrame
+class DataFrameInfo:
     def __init__(self, dataframe):
         self.df = dataframe
+    
+    def describe_columns(self):
+        print("DataFrame Description:\n", self.df.describe(include='all'))
+    
+    def count_nulls(self):
+        null_counts = self.df.isnull().sum()
+        print("Null Value Counts:\n", null_counts)
 
-    def count_null_values(self):
-        # Returns a count of NULL values for each column
-        return self.df.isnull().sum()
+# Create an instance of the class and use its methods
+df_info = DataFrameInfo(df)
+df_info.describe_columns()
+df_info.count_nulls()
 
-    def drop_columns(self, threshold=0.4):
-        # Drops columns with missing values exceeding the threshold percentage
-        initial_cols = len(self.df.columns)
-        self.df.dropna(thresh=len(self.df) * (1 - threshold), axis=1, inplace=True)
-        final_cols = len(self.df.columns)
-        print(f"Dropped {initial_cols - final_cols} columns due to high null values.")
+# Task 3: Remove/impute missing values in the data
+df.fillna(df.median(), inplace=True)  # Simple imputation strategy
 
-    def impute_with_median_mean(self, strategy='median'):
-        # Imputes missing values using median or mean for numerical columns
-        numerical_cols = self.df.select_dtypes(include=['float64', 'int64']).columns
-        if strategy == 'median':
-            for column in numerical_cols:
-                self.df[column].fillna(self.df[column].median(), inplace=True)
-        else:
-            for column in numerical_cols:
-                self.df[column].fillna(self.df[column].mean(), inplace=True)
-        print(f"Missing values imputed with the {strategy}.")
+# Task 4: Perform transformations on skewed columns
+skewed_cols = df.select_dtypes(include=['float64', 'int64']).skew().abs()
+skewed_cols = skewed_cols[skewed_cols > 0.5].index
+df[skewed_cols] = df[skewed_cols].apply(lambda x: np.log1p(x))
 
-class Plotter:
-    def __init__(self, dataframe):
-        self.df = dataframe
+# Milestone 2: Determine software customer use to access the website
+os_usage = df['operating_system'].value_counts(normalize=True) * 100
+plot_bar(os_usage, 'Operating System Usage', 'Operating System', 'Percentage (%)')
 
-    def plot_null_values(self):
-        # Generates a bar plot of the count of NULL values in each column
-        null_data = self.df.isnull().sum()
-        null_data = null_data[null_data > 0]
-        null_data.sort_values(inplace=True)
-        null_data.plot.bar(color='red')
-        plt.title('Null Values Count per Column')
-        plt.xlabel('Columns')
-        plt.ylabel('Null Counts')
-        plt.xticks(rotation=45)
-        plt.show()
+device_usage = df['device_type'].value_counts(normalize=True) * 100
+plot_pie(device_usage, 'Device Type Usage')
 
-def load_credentials(file_path='credentials.yaml'):
-    # Load database credentials from a YAML file
-    with open(file_path, 'r') as file:
-        return yaml.safe_load(file)
+# Browser usage by device type
+mobile_browsers = df[df['device_type'] == 'Mobile']['browser'].value_counts(normalize=True) * 100
+desktop_browsers = df[df['device_type'] == 'Desktop']['browser'].value_counts(normalize=True) * 100
 
-if __name__ == "__main__":
-    creds = load_credentials()
-    db_connector = RDSDatabaseConnector(creds)
-    data = db_connector.fetch_data()
+plt.figure(figsize=(14, 6))
+plt.subplot(1, 2, 1)
+plot_bar(mobile_browsers, 'Mobile Browser Usage', 'Browser', 'Percentage (%)')
+plt.subplot(1, 2, 2)
+plot_bar(desktop_browsers, 'Desktop Browser Usage', 'Browser', 'Percentage (%)')
 
-    # Initializing classes for transformation and plotting
-    transformer = DataFrameTransform(data)
-    plotter = Plotter(data)
+# Milestone 3: Effective marketing
+revenue_by_source = df.groupby('traffic_source')['revenue'].sum()
+plot_bar(revenue_by_source, 'Revenue by Traffic Source', 'Traffic Source', 'Revenue ($)')
 
-    # Visualizing initial null values
-    plotter.plot_null_values()
+bounce_rate_by_source = df.groupby('traffic_source')['bounce_rate'].mean()
+plot_bar(bounce_rate_by_source, 'Bounce Rate by Traffic Source', 'Traffic Source', 'Bounce Rate (%)')
 
-    # Data transformation steps
-    transformer.drop_columns()
-    transformer.impute_with_median_mean()
+# Milestone 4: Revenue analysis
+revenue_by_region = df.groupby('region')['revenue'].sum()
+plot_bar(revenue_by_region, 'Revenue by Region', 'Region', 'Revenue ($)')
 
-    # Re-check null values and visualize again
-    print(transformer.count_null_values())
-    plotter.plot_null_values()
+customer_revenue = df.groupby('customer_type')['revenue'].sum()
+plot_pie(customer_revenue, 'Revenue: New vs Returning Customers')
+
+weekday_revenue = df.groupby('day_of_week')['revenue'].sum()
+plot_bar(weekday_revenue, 'Revenue by Day of the Week', 'Day of Week', 'Revenue ($)')
+
+month_revenue = df.groupby('month')['revenue'].sum()
+plot_bar(month_revenue, 'Revenue by Month', 'Month', 'Revenue ($)')
+
+traffic_type_revenue = df.groupby('traffic_type')['revenue'].sum()
+plot_bar(traffic_type_revenue, 'Revenue by Traffic Type', 'Traffic Type', 'Revenue ($)')
+
